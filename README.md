@@ -18,7 +18,8 @@ LuaBlitz is currently in primary development. It is considered not suitable for 
 | Parser | Starting soon |
 | High-level AST | Not started |
 | API | Not started |
-*API may be assimilated into "High level AST".
+
+*API may be assimilated into "High level AST"
 
 ### Building
 LuaBlitz is aiming to be compiled to Lua using [CSharp.lua](https://github.com/yanghuan/CSharp.lua)
