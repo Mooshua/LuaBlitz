@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.Net;
+using System.Runtime.InteropServices;
+using Microsoft.VisualBasic;
 
 namespace LuaBlitz.Parse
 {
@@ -209,10 +211,10 @@ namespace LuaBlitz.Parse
 			}
 			else
 			{
-				result = "";
+				result = PeekChar(0).ToString();
 			}
 
-			char c = ' ';
+			char c = '1';
 			while (char.IsDigit(c = PeekChar()))
 			{
 				ReadChar();
@@ -383,28 +385,51 @@ namespace LuaBlitz.Parse
 				//	We're an actual number. Strange.
 				//	This rarely happens nowadays ;)
 
-				//	LuaU adds support for _ as a separator, purely visual.
-				//	We just need to.. well, accomodate for it.
-				string number = c.ToString();
+				string number = "";
+				double result;
+				
+				//	C# double parsing supports everything LuaU does except for "_".
+				//	All we need to do is collect "e", ".", and cycle on "_".
+
 				while (true)
 				{
-					number = String.Concat(number, ReadDigits(null));
 
-					//	What did we stop on?
-					char ps = PeekChar(1);
-					if (ps == '_')
+					string digits = ReadDigits(null);
+					//	Append digits to string
+					number = String.Concat(number, digits);
+					//	Peek ahead and see if it's a _, e, or ".".
+					Console.WriteLine($"Digits Iter: {digits}; total: {number}");
+
+					char p = PeekChar();
+
+					if (p == '_')
 					{
-						//	Ignore the _, continue without even appending it.
 						ReadChar();
+						//	Advance one more;
+						//	ReadDigits will pick up the scraps.
+						ReadChar();
+					} else if (p == '.' || p == 'e')
+					{
+						//	It's desirable. Add it on top.
+						ReadChar();
+						//number = String.Concat(number, p);
 					}
 					else
 					{
+						ReadChar();
 						break;
 					}
+					
 				}
-				//	Number should now be complete.
-				//	We're expecting "e" or "." now.
-				Console.WriteLine($"Number Result: {number}");
+				
+				Console.WriteLine(_vector.ToString());
+
+				if (!double.TryParse(number, out result))
+				{
+					throw new ParseException("Failed to parse double", start, _vector, GetVectorSpan(start, _vector));
+				}
+
+				return GotToken(TokenType.NumberLiteral, start, number, result);
 			}
 			else
 			{
