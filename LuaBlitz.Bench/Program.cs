@@ -8,7 +8,7 @@ namespace LuaBlitz.Bench
 		static void Main(string[] args)
 		{
 			Console.WriteLine("Hello World!");
-			var a =new Lexer(" Hello()");
+			var a =new Lexer("awesome() 1_423_192 epic() e");
 		}
 	}
 }

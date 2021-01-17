@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Net;
 
 namespace LuaBlitz.Parse
 {
@@ -12,9 +13,6 @@ namespace LuaBlitz.Parse
 		//	long tokens
 		//	like 'function', 'local'
 		LongToken,
-		//	op tokens
-		//	like '//', '...'
-		OpToken,
 		//	Literals
 		//	literal, any free-floating text
 		Literal,
@@ -26,8 +24,12 @@ namespace LuaBlitz.Parse
 		//	that's the parser's job.
 		//	We'll include it anyways in case we need it
 		TableLiteral,
+		//	Comment; may be useful for code gen purposes/ "TO DO" searching
+		Comment,
 		//	And EOF, so we know when to kick the bucket.
 		Eof,
+		//	None, in case things go *that* badly.
+		None,
 	}
 
 	public static class LexerConst
@@ -58,43 +60,35 @@ namespace LuaBlitz.Parse
 			"continue",
 		};
 
-		//	One-char tokens.
-		//	**ONLY USE CHAR**
+		//	Short tokens (**not words**)
 		public static ArrayList ShortTokens = new ArrayList
 		{
 			//	--> Lua 5.1
-			//	Source: https://www.lua.org/manual/5.1/manual.html#2.1
-
-			//	Math
-			'+', '-', '*', '/', '&', '^', '#',
-			//	Compare
-			'=', '<', '>',
-			//	Boxes
-			'(', ')', '{', '}', '[', ']',
-			//	Comma, index, (LuaU Typing)
-			',', ';', ':', '.'
-		};
-
-		//	Non-text tokens which are more than one char.
-		public static ArrayList OpTokens = new ArrayList
-		{
-			//	--> Lua 5.1
 			//	Source: 
+		
+			//	Math
+			"+", "-", "*", "/", "&", "^", "#",
+			//	Compare
+			"=", "<", ">",
+			//	Boxes
+			"(", ")", "{", "}", "[", "]",
 			
 			//	Compare
 			"==","~=","<=",">=",
 			//	Dots
 			"..","...",
-			
+			//	Comment excluded
+			//	There's a ton of custom syntax for that
+			//	We want to tokenize it properly.
+
 			//	--> LuaU
 			//	Source: https://roblox.github.io/luau/syntax.html
 			
 			//	Typing
 			"->",
-			//	Numbers
-			"0x", "0X",
-			"0b", "0B",
-			//	String literals are handled as part of string parsing, FYI.
+			",", ";", ":", ".",
+			//	String and number literals are handled as part of parsing
+			//	So we'll just ignore them here.
 		};
 	}
 
@@ -120,9 +114,10 @@ namespace LuaBlitz.Parse
 				//	Return 0.
 				return (char) 0;
 			}
+
 			//	Save current vector
 			_lastvec = _vector;
-			
+
 			//	Get the character at the pointer
 			char c = _code[_pointer];
 			if (c == '\n')
@@ -135,6 +130,7 @@ namespace LuaBlitz.Parse
 				//	Else, advance one column.
 				_vector = _vector.Next();
 			}
+
 			//	Move pointer forwards for next iteration.
 			_pointer++;
 
@@ -147,6 +143,7 @@ namespace LuaBlitz.Parse
 			_vector = _lastvec;
 			_pointer = _pointer - 1;
 		}
+
 		//	<summary>
 		//	Get the code between start and end.
 		//	Not checked for EOF.
@@ -178,12 +175,12 @@ namespace LuaBlitz.Parse
 				//	Return null byte.
 				return (char) 0;
 			}
-			
+
 			//	We're within bounds
 			//	Just get the thing and get out
 			return _code[pointer];
 		}
-		
+
 		//	<summary>
 		//	Read a sequence of letters or digits
 		//	Returns them :)
@@ -192,30 +189,88 @@ namespace LuaBlitz.Parse
 		{
 			string result = start.ToString();
 			char c = start;
-			while (char.IsLetterOrDigit(c = ReadChar()))
+			while (char.IsLetterOrDigit(c = PeekChar(0)))
 			{
+				ReadChar();
 				result = string.Concat(result, c);
 			}
-			
+
 			//	Move back to account for the 1 char we read that wasn't correct.
-			BackChar();
 
 			return result;
 		}
 
-		private string ReadDigits(char start)
+		private string ReadDigits(char? start)
 		{
-			string result = start.ToString();
-			char c = start;
-			while (char.IsDigit(c = ReadChar()))
+			string result;
+			if (start is not null)
 			{
+				result = start.ToString();
+			}
+			else
+			{
+				result = "";
+			}
+
+			char c = ' ';
+			while (char.IsDigit(c = PeekChar()))
+			{
+				ReadChar();
 				result = string.Concat(result, c);
 			}
-			
-			//	Move back cuz of the 1 incorrect char.
-			BackChar();
 
 			return result;
+		}
+
+		private string ReadOp(char start)
+		{
+
+			//	Op can be up to 3 chars long
+			//	And can overlap
+			//	We're going to peek 3 chars ahead
+			//	And see if 1-3 match;
+			//	And choose the longest match
+
+			//	ex: "..e"
+			//	. = true,
+			//	.. = true,
+			//	-> .. is longest, so that's what we go with.
+
+			var peeked = new char[] {start, PeekChar(1), PeekChar(2)};
+
+			string f = peeked[0].ToString();
+			string s = string.Concat(peeked[0], peeked[1]);
+			string t = string.Concat(peeked[0], peeked[1], peeked[2]);
+
+			//	"first" must be a short token;
+			//	because there are no 1 length op tokens.
+			var first = LexerConst.ShortTokens.Contains(f);
+			var second = LexerConst.ShortTokens.Contains(s);
+			var third = LexerConst.ShortTokens.Contains(t);
+
+			if (third)
+			{
+				//	Advance pointer
+				ReadChar();
+				ReadChar();
+				//ReadChar();
+				//	return it
+				return t;
+			}
+			else if (second)
+			{
+				ReadChar();
+				//ReadChar();
+				return s;
+			}
+			else if (first)
+			{
+				//ReadChar();
+				return f;
+			}
+
+			return String.Empty;
+
 		}
 
 		public Lexer(string code)
@@ -223,21 +278,58 @@ namespace LuaBlitz.Parse
 			Code = code;
 			//	Char array for easy parsing.
 			_code = code.ToCharArray();
-			
-			this.GetNextToken();
+
+			/*
+			Token last;
+			while ((last = GetNextToken()).Type != TokenType.Eof)
+			{
+				Console.WriteLine(last.ToStringVerbose());
+			}
+			Console.WriteLine("EOF");
+			*/
+
+			for (int i = 0; i < 16; i++)
+			{
+				Console.WriteLine(GetNextToken().ToStringVerbose());
+			}
+
+		}
+
+		private Token GotToken(TokenType type, Vector start, string value, double? valueNumber)
+		{
+			Vector end = _vector.Offset(0);
+
+			if (valueNumber is not null)
+			{
+				return new Token(type, start, end, GetVectorSpan(start, end), value, (double) valueNumber);
+			}
+			else if (value is not null)
+			{
+				return new Token(type, start, end, GetVectorSpan(start, end), value);
+			}
+			else
+			{
+				return new Token(type, start, end, GetVectorSpan(start, end));
+			}
 		}
 
 		public Token GetNextToken()
 		{
 			{
 
-				while (char.IsWhiteSpace(ReadChar()))
+				char whitespace;
+				while (char.IsWhiteSpace(whitespace = ReadChar()))
 				{
 					//	We're skipping over whitespace.
 					//	Ignore this loop.
 				}
+
+				if (whitespace == (char) 0)
+				{
+					return GotToken(TokenType.Eof, _vector.Offset(-1), ((char) 0).ToString(), null);
+				}
 			}
-			
+
 			BackChar();
 
 			//	Move back 1 to account for the character we just read
@@ -247,30 +339,27 @@ namespace LuaBlitz.Parse
 
 			char c = ReadChar();
 
-			TokenType type = TokenType.Eof;
-			string value = null;
-			double ?valueNumber = null;
+			Console.WriteLine($"{c}, {(int) c} {(char) 0}, {c == (char) 0}");
 
 			if (char.IsLetter(c))
 			{
 				//	We're a letter; most likely a token
 				//	Record for literal or longtoken.
-				value = ReadLettersOrDigits(c);
-				
+				string value = ReadLettersOrDigits(c);
+
 				//	Check to see if we're a longtoken.
 				if (LexerConst.LongTokens.Contains(value))
 				{
 					//	We're a long token!
-					type = TokenType.LongToken;
+					return GotToken(TokenType.LongToken, start, value, null);
 				}
 				else
 				{
 					//	Not a long token, must be literal.
-					type = TokenType.Literal;
+					return GotToken(TokenType.Literal, start, value, null);
 				}
 			}
-
-			if (char.IsDigit(c))
+			else if (char.IsDigit(c))
 			{
 				//	Either a number or ESCAPED number.
 				//	Check if we're 0. If so, peek ahead and see if we find "x", or "b"
@@ -280,34 +369,62 @@ namespace LuaBlitz.Parse
 					if (p == 'b' || p == 'B')
 					{
 						//	We're binary
-					} else if (p == 'x' || p == 'X')
+						//	Catch up
+						ReadChar();
+					}
+					else if (p == 'x' || p == 'X')
 					{
 						//	We're hexadecimal
+						//	Catch up
+						ReadChar();
+					}
+				}
+				
+				//	We're an actual number. Strange.
+				//	This rarely happens nowadays ;)
+
+				//	LuaU adds support for _ as a separator, purely visual.
+				//	We just need to.. well, accomodate for it.
+				string number = c.ToString();
+				while (true)
+				{
+					number = String.Concat(number, ReadDigits(null));
+
+					//	What did we stop on?
+					char ps = PeekChar(1);
+					if (ps == '_')
+					{
+						//	Ignore the _, continue without even appending it.
+						ReadChar();
 					}
 					else
 					{
-						//	We're an actual number. Strange.
-						//	This rarely happens nowasays ;)
-						
+						break;
 					}
 				}
-			}
-			
-			//	End
-			//	Capture output
-			//	Submit token
-			Vector end = _vector.Offset(0);
-			if (value is not null)
-			{
-				return new Token(type, start, end, GetVectorSpan(start,end), value);
-			} else if (valueNumber is not null)
-			{
-				return new Token(type, start, end, GetVectorSpan(start,end), value, valueNumber);
+				//	Number should now be complete.
+				//	We're expecting "e" or "." now.
+				Console.WriteLine($"Number Result: {number}");
 			}
 			else
 			{
-				return new Token(type, start, end, GetVectorSpan(start,end));
+				{
+					string optest = ReadOp(c);
+					if (optest == String.Empty)
+					{
+						//	ReadOp failed to find an op
+						//	Continue with life.
+					}
+					else
+					{
+						//	ReadOp succeeded!
+						//	Build our response.
+						return GotToken(TokenType.ShortToken, start, optest, null);
+					}
+				}
 			}
+
+			return GotToken(TokenType.None, start, null, null);
 
 		}
 

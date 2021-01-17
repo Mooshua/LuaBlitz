@@ -30,19 +30,25 @@
 			ValueNumber = null;
 		}
 		
-		public Token(TokenType token, Vector start, Vector end, string code, string value, double valuen)
+		public Token(TokenType token, Vector start, Vector end, string code, string value, double valueNumber)
 		{
 			Type = token;
 			Start = start;
 			End = end;
 			Code = code;
 			Value = value;
-			ValueNumber = valuen;
+			ValueNumber = valueNumber;
 		}
 
 		public override string ToString()
 		{
 			return $"{Start.ToString()} -> {End.ToString()}, '{Code}'";
+		}
+
+		public string ToStringVerbose()
+		{
+			return
+				$"[{Type}]: {Start.ToString()} -> {End.ToString()}, '{Code}' (string: {Value}; double {ValueNumber})";
 		}
 	}
 }
