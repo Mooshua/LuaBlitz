@@ -92,6 +92,16 @@ namespace LuaBlitz.Parse
 			//	String and number literals are handled as part of parsing
 			//	So we'll just ignore them here.
 		};
+
+		public static ArrayList Hexadecimal = new ArrayList()
+		{
+			//	Lowercase
+			'a','b','c','d','e','f',
+			//	Uppercase
+			'A','B','C','D','E','F',
+			//	Numbers
+			'0','1','2','3','4','5','6','7','8','9',
+		};
 	}
 
 	public class Lexer
@@ -322,7 +332,8 @@ namespace LuaBlitz.Parse
 			char c = PeekChar(-1);
 			if (c != '[')
 			{
-				throw new ParseException("Tried to parse brackets while not pointing to bracket", _vector, _vector, c.ToString());
+				//throw new ParseException("Tried to parse brackets while not pointing to bracket", _vector, _vector, c.ToString());
+				return null;
 			}
 
 			{
@@ -411,6 +422,8 @@ namespace LuaBlitz.Parse
 
 				if (whitespace == (char) 0)
 				{
+					//	We've hit EOF.
+					//	Just cancel the operation here.
 					return GotToken(TokenType.Eof, _vector.Offset(-1), ((char) 0).ToString(), null);
 				}
 			}
@@ -448,18 +461,62 @@ namespace LuaBlitz.Parse
 				//	Check if we're 0. If so, peek ahead and see if we find "x", or "b"
 				if (c == '0')
 				{
-					char p = PeekChar();
+					char p = PeekChar(0);
 					if (p == 'b' || p == 'B')
 					{
 						//	We're binary
 						//	Catch up
 						ReadChar();
+						string binary = "";
+						
+						while (true)
+						{
+							c = ReadChar();
+
+							if (c == '_')
+							{
+								//	Skip appending.
+							}
+							else if (c != '0' && c != '1')
+							{
+								//	Parse it
+								Console.WriteLine($"Ending on {binary}, {c}");
+								return GotToken(TokenType.NumberLiteral, start, binary, Convert.ToUInt64(binary,2));
+							}
+							else
+							{
+								binary = String.Concat(binary, c);
+							}
+						}
+						
 					}
 					else if (p == 'x' || p == 'X')
 					{
 						//	We're hexadecimal
 						//	Catch up
 						ReadChar();
+						//	Got a custom list for hexadecimal
+						string hexadecimal = "";
+
+						while (true)
+						{
+							c = ReadChar();
+
+							if (c == '_')
+							{
+								//	Skip appending.
+							}
+							else if (!LexerConst.Hexadecimal.Contains(c))
+							{
+								//	We're finished.
+								//	Parse it
+								return GotToken(TokenType.NumberLiteral, start, hexadecimal, Convert.ToUInt64(hexadecimal, 16));
+							}
+							else
+							{
+								hexadecimal = String.Concat(hexadecimal, c);
+							}
+						}
 					}
 				}
 				
@@ -534,10 +591,19 @@ namespace LuaBlitz.Parse
 
 					//	If it's a backslash,
 					//	Escape next character.
-					//	(blindly add to string with advance)
 					if (c == '\\')
 					{
-						value = string.Concat(value, ReadChar());
+						//	Peek the character
+						char p = PeekChar(0);
+						if (p == look)
+						{
+							value = string.Concat(value, ReadChar());
+						}
+						//	If it's not the closing " or ', the backslash might be needed for other processing. Leave it in the string.
+						else
+						{
+							value = String.Concat(value, c);
+						}
 					}
 					else
 					{
@@ -551,7 +617,36 @@ namespace LuaBlitz.Parse
 			}
 			else if (c == '-')
 			{
-				
+				//	Peek if we're two-in-a-row
+				char p = PeekChar(0);
+				if (p == '-')
+				{
+					//	Catch up:
+					ReadChar();
+					//	We're a comment!
+					//	Check if we should try to parse for brackets.
+					ReadChar();	//	Point towards brackets- if they exist.
+					string brackets = ReadBrackets();
+
+					if (brackets is null)
+					{
+						//	Fail. Just read until newline.
+						string comment = "";
+
+						while ((c = ReadChar()) != '\n')
+						{
+							comment = String.Concat(comment, c);
+						}
+
+						return GotToken(TokenType.Comment, start, comment, null);
+					}
+					else
+					{
+						//	Brackets is the value of the comment!
+						//	Awesome! Throw out our token.
+						return GotToken(TokenType.Comment, start, brackets, null);
+					}
+				}
 			}
 			//	else	//	Removing because it's interfering with failed runs.
 			{

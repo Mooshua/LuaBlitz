@@ -14,8 +14,8 @@ LuaBlitz is currently in primary development. It is considered not suitable for 
 
 | Subproject | Status |
 | :----: | :----: |
-| Tokenizer | Working on **(35%)** |
-| Parser | Starting soon |
+| Tokenizer | Finished *?* |
+| Parser | Working On |
 | High-level AST | Not started |
 | API | Not started |
 
