@@ -7,12 +7,7 @@ namespace LuaBlitz.Bench
 	{
 		static void Main(string[] args)
 		{
-			Console.WriteLine("Hello World!");
-			var a =new Lexer(@"
-function abc(test, test2 :string)
-	return 'Hello \' world'
-end
-");
+			Console.WriteLine("Hello, LuaU!");
 		}
 	}
 }
