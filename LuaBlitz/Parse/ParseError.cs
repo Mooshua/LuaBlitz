@@ -23,4 +23,9 @@ namespace LuaBlitz.Parse
 			this.Message = $"[ParseException] Failed with message \"{message}\" at {start.ToString()} -> {end.ToString()}, '{code}'";
 		}
 	}
+
+	public enum ParseErrorType
+	{
+		
+	}
 }

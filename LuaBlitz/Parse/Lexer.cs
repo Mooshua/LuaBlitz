@@ -21,7 +21,7 @@ namespace LuaBlitz.Parse
 		//	number literal, any number
 		NumberLiteral,
 		//	string literal, legit any string lol
-		StringLiteral,
+		StringValue,
 		//	Table literal does not exist,
 		//	that's the parser's job.
 		//	We'll include it anyways in case we need it
@@ -315,6 +315,89 @@ namespace LuaBlitz.Parse
 			}
 		}
 
+		private string ReadBrackets()
+		{
+			Vector start = _vector.Offset(-1);
+			string value = "";
+			char c = PeekChar(-1);
+			if (c != '[')
+			{
+				throw new ParseException("Tried to parse brackets while not pointing to bracket", _vector, _vector, c.ToString());
+			}
+
+			{
+				char n = PeekChar(0);
+				if (n != '[' && n != '=')
+				{
+					//	Not a bracket string.
+					return null;
+				}
+			}
+			
+			int eq = 0;
+			while ((c = ReadChar()) == '=')
+			{
+				eq++;
+			}
+			
+			if (c != '[')
+			{
+				throw new ParseException($"Missing '[' after {PeekChar(-1)}", _vector, _vector, c.ToString());
+			}
+			
+			//	Now we enter a while loop, until the next `eq` characters are "]", then all "=", and the character after that is "]".
+
+			bool isComp = false;
+			int comp = 0;
+			string compHold = "";
+			while ((c = ReadChar()) != (char) 0)
+			{
+				//	If char == ], and is_comp = false,
+				//	set comp to 0 and is_comp to true.
+				//	clear comp_hold.
+				if (c == ']')
+				{
+					if (isComp == false)
+					{
+						isComp = true;
+						comp = 0;
+						compHold = "]";
+					}
+					else
+					{
+						if (comp == eq)
+						{
+							//	comp == eq, meaning the amount of "=" signs is absolute.
+							//	We can finish.
+							return value;
+						}
+						else
+						{
+							//	Fail!
+							//	Whoops.
+							//	We'll just append comp_hold to value.
+							value = String.Concat(value, compHold, ']');
+							compHold = "";
+							comp = 0;
+							isComp = false;
+						}
+					}
+				} 
+				else if (c == '=' && isComp)
+				{
+					compHold = String.Concat(compHold, '=');
+					comp++;
+				}
+				else
+				{
+					value = String.Concat(value, c);
+				}
+			}
+
+			throw new ParseException("Unclosed brackets", start, _vector, GetVectorSpan(start, _vector));
+
+		}
+
 		public Token GetNextToken()
 		{
 			{
@@ -340,9 +423,7 @@ namespace LuaBlitz.Parse
 			//	Let's go.
 
 			char c = ReadChar();
-
-			Console.WriteLine($"{c}, {(int) c} {(char) 0}, {c == (char) 0}");
-
+			
 			if (char.IsLetter(c))
 			{
 				//	We're a letter; most likely a token
@@ -398,7 +479,6 @@ namespace LuaBlitz.Parse
 					//	Append digits to string
 					number = String.Concat(number, digits);
 					//	Peek ahead and see if it's a _, e, or ".".
-					Console.WriteLine($"Digits Iter: {digits}; total: {number}");
 
 					char p = PeekChar();
 
@@ -431,7 +511,49 @@ namespace LuaBlitz.Parse
 
 				return GotToken(TokenType.NumberLiteral, start, number, result);
 			}
-			else
+			else if (c == '[')
+			{
+				//	We're going to check if there is another bracket or = sign after this.
+				string value = ReadBrackets();
+				if (value is not null)
+				{
+					return GotToken(TokenType.StringValue, start, value, null);
+				}
+				
+			}
+			else if (c == '"' || c == '\'')
+			{
+				char look = c;
+				string value = "";
+				while ((c = ReadChar()) != look)
+				{
+					if (c == (char) 0)
+					{
+						throw new ParseException("Unclosed string", start, _vector, GetVectorSpan(start, _vector));
+					}
+
+					//	If it's a backslash,
+					//	Escape next character.
+					//	(blindly add to string with advance)
+					if (c == '\\')
+					{
+						value = string.Concat(value, ReadChar());
+					}
+					else
+					{
+						value = String.Concat(value, c);
+					}
+
+				}
+
+				return GotToken(TokenType.StringValue, start, value, null);
+
+			}
+			else if (c == '-')
+			{
+				
+			}
+			//	else	//	Removing because it's interfering with failed runs.
 			{
 				{
 					string optest = ReadOp(c);
